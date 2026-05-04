@@ -1,0 +1,11 @@
+/data
+/unused_data
+/figures
+/storage
+/artifacts
+/resources
+/models
+/benchmark
+/checkpoints
+/tiktoken
+/__pycache__

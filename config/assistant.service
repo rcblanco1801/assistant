@@ -1,0 +1,22 @@
+[Unit]
+Description=llama.cpp-like API Assistant (Uvicorn)
+After=network.target
+
+[Service]
+User=administrador
+Group=administrador
+WorkingDirectory=/opt/assistant
+# Para entornos virtuales:
+Environment="HF_TOKEN=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"
+Environment="PYENV_ROOT=/home/administrador/.pyenv"
+Environment="PATH=/home/administrador/.pyenv/versions/assistant/bin:%h/.pyenv/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+ExecStart=/home/administrador/.pyenv/versions/assistant/bin/uvicorn main:app --app-dir /opt/assistant --host 0.0.0.0 --port 8000 --workers 1
+Restart=no
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+# Opcional: límites y open files
+LimitNOFILE=65535
+AllowedCPUs=3-15
+
+[Install]
+WantedBy=multi-user.target

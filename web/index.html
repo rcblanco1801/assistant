@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Asistente Benalmádena</title>
+
+<style>
+  :root{
+    --bg:#0b0c10;--card:#15171c;--ink:#e8e8e8;--muted:#98a2b3;--line:#2a2f3a;--accent:#3b82f6;
+    --content-max: 1400px;                             /* ancho máx. de contenido */
+    --base-fs: clamp(16px, 1.1vw + 12px, 19px);        /* tipografía fluida */
+    --chat-gap-right: clamp(12px, 1.2vw, 22px);        /* aire junto a la barra de scroll */
+    --control-h: 48px;                                 /* alto común de input/botones */
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font: var(--base-fs)/1.5 system-ui,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;
+    display:flex;min-height:100vh;
+  }
+  .wrap{
+    width: min(var(--content-max), 92vw);
+    margin: 0 auto;
+    padding-inline: clamp(12px, 2vw, 28px);
+    padding-block: clamp(12px, 2vh, 24px);
+    display:flex;flex-direction:column;gap:12px;
+  }
+
+  /* Barra de título con línea inferior + acciones a la derecha */
+  .titlebar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding-block: 6px 12px;
+    border-bottom:1px solid var(--line);
+  }
+  .title{font-weight:700;font-size: clamp(1.1rem, 0.9rem + 1vw, 1.6rem);margin:0}
+  .title-actions{display:flex;align-items:center;gap:8px}
+
+  /* Cuerpo del chat: más estrecho y con separación real respecto al scroll */
+  .chat{
+    flex:1;display:flex;flex-direction:column;gap:12px;
+    overflow:auto;padding-bottom:8px;
+    width: calc(100% - var(--chat-gap-right));
+    margin-right: var(--chat-gap-right);
+
+    /* separa la barra de scroll del contenido si el navegador lo soporta */
+    scrollbar-gutter: stable both-edges; /* reserva espacio para la scrollbar */
+    padding-inline-end: clamp(12px, 1.2vw, 22px); /* separación visual extra */
+  }
+  @supports not (scrollbar-gutter: stable) {
+    .chat{ padding-inline-end: calc(var(--chat-gap-right) + 10px); }
+  }
+
+  .msg{padding:14px 16px;border-radius:14px;background:var(--card);white-space:pre-wrap;max-width:95%}
+  .me{align-self:flex-end;background:#2a2f3a}
+  .bot{align-self:flex-start}
+
+  /* Barra inferior fija (sticky) */
+  .row{
+    position:sticky;bottom:0;
+    background:linear-gradient(180deg, rgba(11,12,16,0.6), var(--bg) 30%);
+    backdrop-filter:saturate(120%);
+    display:flex;gap:8px;align-items:center;padding-top:10px;
+    border-top:1px solid var(--line);
+  }
+
+  input,button,select{background:#1b1f27;color:var(--ink);border:1px solid var(--line);border-radius:10px}
+  input{flex:1;height:var(--control-h);padding:0 14px;font-size:1rem}
+  button{height:var(--control-h);padding:0 14px;cursor:pointer;font-size:1rem}
+  button[disabled], input[disabled]{opacity:.6;cursor:not-allowed}
+
+  /* Botón de “Pensamiento Extendido”: texto y resaltado en activo */
+  .mode{
+    /*padding:0 12px;               /* ancho en función del texto */
+    /*min-width:max-content;
+    display:grid;place-items:center;
+    border:1px solid var(--line);
+    background:#1b1f27;
+    transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;
+    white-space:nowrap;*/
+    display:none !important;
+  }
+  .mode.active{
+    background:#0e1a2e;
+    border-color:var(--accent);
+    box-shadow:0 0 0 2px rgba(59,130,246,.25) inset;
+  }
+  .mode:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+  }
+
+  /* Botón borrar (esquina sup. derecha) */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:.5ch;
+    height:var(--control-h); padding:0 12px; border-radius:10px;
+    border:1px solid var(--line); background:#1b1f27; color:var(--ink);
+    transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{ background:#1a222f }
+  .btn-danger{
+    border-color:#b91c1c66; /* rojo suave */
+  }
+  .btn-danger:hover{
+    background:#2a1416; border-color:#ef4444aa;
+  }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px }
+
+  .thinking{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.95rem;min-height:24px;margin-left:auto}
+  .spinner{width:18px;height:18px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;display:none}
+  .thinking.active .spinner{display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .muted{color:var(--muted);font-size:12px;margin-top:6px}
+
+  /* Markdown */
+  .msg.bot :is(p,ul,ol,pre,code,blockquote,h1,h2,h3,h4,h5,h6,table){margin:0.3em 0}
+  .msg.bot pre{overflow:auto;padding:10px;border-radius:10px;background:#0f1116}
+  .msg.bot code{background:#0f1116;padding:2px 5px;border-radius:6px}
+  .msg.bot a{color:#93c5fd}
+
+  /* KaTeX: leve espaciado */
+  .msg.bot .katex-display{ margin: .6em 0; }
+</style>
+
+<div class="wrap">
+  <!-- Título con línea separadora + botón borrar a la derecha -->
+  <div class="titlebar">
+    <h1 class="title">Asistente Benalmádena</h1>
+    <div class="title-actions">
+      <button id="clear" class="btn btn-danger" title="Borrar chat y reiniciar memoria" aria-label="Borrar chat y reiniciar memoria">
+        Borrar chat
+      </button>
+    </div>
+  </div>
+
+  <!-- Cuerpo del chat (más estrecho y con separación real respecto al scroll) -->
+  <div id="chat" class="chat" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Barra inferior pegada -->
+  <div class="row">
+    <button id="mode" class="mode" aria-pressed="false"
+            title="Pensamiento Extendido" aria-label="Pensamiento Extendido">
+      Pensamiento Extendido
+    </button>
+
+    <input id="prompt" placeholder="Escribe tu mensaje y pulsa Enter…" autocomplete="off" />
+    <button id="send">Enviar</button>
+
+    <div id="thinking" class="thinking" aria-live="polite" aria-atomic="true">
+      <div class="spinner" aria-hidden="true"></div>
+      <span id="thinkingText"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Markdown + Sanitizado -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
+<!-- KaTeX + auto-render -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script>
+const chatEl = document.getElementById('chat');
+const promptEl = document.getElementById('prompt');
+const sendBtn = document.getElementById('send');
+const thinking = document.getElementById('thinking');
+const thinkingText = document.getElementById('thinkingText');
+const modeBtn = document.getElementById('mode');
+const clearBtn = document.getElementById('clear');
+
+/* === Configurar aquí si la API está en otro host/puerto ===
+   - vacío => mismo origen
+   - ejemplo: const API_BASE = "http://tu-servidor:8000";
+*/
+const API_BASE = "";
+
+/* Identidad estable por usuario para cabecera X-User */
+let userId = localStorage.getItem('userId');
+if (!userId) {
+  userId = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+  localStorage.setItem('userId', userId);
+}
+
+/* Historial y estado */
+let history = JSON.parse(localStorage.getItem('history')||'[]');
+let busy = false;
+
+/* (Opcional) razonamiento; el botón sigue en el DOM pero oculto por CSS */
+let reasoning = (localStorage.getItem('reasoning') || 'low'); // 'low' | 'high'
+function renderMode(){
+  const isHigh = (reasoning === 'high');
+  modeBtn.setAttribute('aria-pressed', String(isHigh));
+  modeBtn.classList.toggle('active', isHigh);
+}
+renderMode();
+modeBtn.addEventListener('click', ()=>{
+  reasoning = (reasoning === 'high') ? 'low' : 'high';
+  localStorage.setItem('reasoning', reasoning);
+  renderMode();
+});
+
+/* Helpers UI */
+function setBusy(state, label='Pensando…'){
+  busy = state;
+  promptEl.disabled = state;
+  sendBtn.disabled = state;
+  modeBtn.disabled = state;
+  clearBtn.disabled = state;
+  thinking.classList.toggle('active', state);
+  thinkingText.textContent = state ? label : '';
+}
+
+/* Markdown + KaTeX */
+function renderMarkdownAndMath(el, mdText){
+  const html = DOMPurify.sanitize(marked.parse(mdText || ''));
+  el.innerHTML = html;
+  scheduleMath(el);
+}
+let mathRaf = null, mathTimer = null;
+function scheduleMath(root){
+  if (mathRaf) cancelAnimationFrame(mathRaf);
+  mathRaf = requestAnimationFrame(()=>{
+    if (mathTimer) clearTimeout(mathTimer);
+    mathTimer = setTimeout(()=>{
+      try{
+        renderMathInElement(root, {
+          delimiters: [
+            {left: "$$", right: "$$", display: true},
+            {left: "\\[", right: "\\]", display: true},
+            {left: "$", right: "$", display: false},
+            {left: "\\(", right: "\\)", display: false}
+          ],
+          throwOnError: false,
+          strict: "ignore",
+          ignoredTags: ["script","noscript","style","textarea","pre","code"],
+          ignoredClasses: ["katex"]
+        });
+      }catch(e){}
+    }, 100);
+  });
+}
+
+/* Render de mensajes */
+function addMsg(role, content){
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'me' : 'bot');
+  if(role === 'assistant'){
+    renderMarkdownAndMath(div, content);
+  }else{
+    div.textContent = content;
+  }
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
+}
+function renderAll(){
+  chatEl.innerHTML='';
+  for(const m of history) addMsg(m.role, m.content);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+renderAll();
+
+/* ---- Borrar chat + limpiar memoria del servidor ---- */
+clearBtn.addEventListener('click', async ()=>{
+  if (busy) return;
+  const ok = window.confirm('¿Seguro que quieres borrar el chat y reiniciar la memoria del asistente?');
+  if(!ok) return;
+
+  try{
+    await fetch(`${API_BASE}/v1/clear`, {
+      method: 'POST',
+      headers: { 'X-User': userId }
+    });
+  }catch(e){
+    console.warn('No se pudo limpiar en el servidor:', e);
+  }
+
+  history = [];
+  localStorage.removeItem('history');
+  chatEl.innerHTML = '';
+});
+
+/* ---- Envío + streaming SSE desde /v1/chat/completions ---- */
+async function send(){
+  if(busy) return;
+  const content = promptEl.value.trim();
+  if(!content) return;
+  promptEl.value='';
+
+  history.push({role:'user', content});
+  addMsg('user', content);
+  setBusy(true, 'Pensando…');
+
+  const botDiv = addMsg('assistant', '');
+  botDiv.setAttribute('aria-live','polite');
+
+  // Buffers del efecto tecleo
+  let renderBuffer = '';
+  let renderedText = '';
+  let finalText = '';
+  let streamDone = false;
+  let typeTimer = null;
+
+  function startTypewriter(){
+    if(typeTimer) return;
+    const intervalMs = 20;
+    typeTimer = setInterval(()=>{
+      if(renderBuffer.length === 0){
+        if(streamDone){ clearInterval(typeTimer); typeTimer = null; }
+        return;
+      }
+      const take = Math.min(8, Math.max(1, Math.floor(renderBuffer.length/40)));
+      const slice = renderBuffer.slice(0, take);
+      renderBuffer = renderBuffer.slice(take);
+      renderedText += slice;
+
+      renderMarkdownAndMath(botDiv, renderedText);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }, intervalMs);
+  }
+
+  const body = {
+    model: "", 
+    stream: true,
+    messages: [
+      ...history.map(m => ({role: m.role, content: m.content}))
+    ]
+  };
+
+  try{
+    const res = await fetch(`${API_BASE}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json',
+        'X-User': userId
+      },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    // El endpoint devuelve SSE: "data: {...}\n\n" y un final "data: [DONE]"
+    // Formato OpenAI-like: cada bloque con choices[0].delta.content / delta.role
+    // Doc SSE: bloques terminados por doble salto de línea. 
+    // (Ver referencias de formato en OpenAI y MDN.)
+    let sseBuf = '';
+    startTypewriter();
+
+    read_loop:
+    while(true){
+      const {value, done} = await reader.read();
+      if(done) break;
+
+      sseBuf += decoder.decode(value, {stream:true});
+
+      // Los eventos SSE se separan por doble newline
+      let events = sseBuf.split('\n\n');
+      sseBuf = events.pop(); // buffer incompleto
+
+      for(const ev of events){
+        const lines = ev.split('\n');
+        for(const line of lines){
+          const trimmed = line.trim();
+          if(!trimmed.startsWith('data:')) continue;
+
+          const payload = trimmed.slice(5).trim(); // tras 'data:'
+          if(payload === '[DONE]'){ 
+            streamDone = true; 
+            break read_loop; 
+          }
+
+          let chunk;
+          try { chunk = JSON.parse(payload); } catch { continue; }
+
+          const choice = chunk?.choices?.[0] || {};
+          const delta  = choice?.delta || {};
+
+          // Ignoramos la primera delta con { role: "assistant" }
+          if (typeof delta.content === 'string' && delta.content){
+            finalText   += delta.content;
+            renderBuffer += delta.content;
+          }
+        }
+      }
+    }
+
+    // Drena lo que falte en el buffer visual
+    if(renderBuffer.length){
+      renderedText += renderBuffer;
+      renderMarkdownAndMath(botDiv, renderedText);
+      renderBuffer = '';
+    }
+
+    history.push({role:'assistant', content: finalText});
+    localStorage.setItem('history', JSON.stringify(history));
+
+  }catch(err){
+    botDiv.textContent = 'Error al llamar a /v1/chat/completions: ' + err.message;
+  }finally{
+    setBusy(false, '');
+    promptEl.focus();
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+}
+
+sendBtn.onclick = send;
+promptEl.addEventListener('keydown', (e)=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+});
+</script>
+</html>
