@@ -1,4 +1,4 @@
-Documentación del asistente virtual
+# Documentación del asistente virtual
 
 ## Overview
 
@@ -33,62 +33,43 @@ Otros detalles importantes: la extracción, el preprocesamiento y la generación
 Para lanzar la aplicación, deberemos seguir los siguientes pasos:
 
 1. Replicar el entorno virtual con ``pyenv``. Para ello, deberemos tener ``pyenv`` junto con ``pyenv-virtualenv`` en nuestro sistema debian, ejecutando lo siguiente:
-  - Instalar dependencias de pyenv y pyenv-virtualenv: ``sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev git``
-    
-  - Instalamos propiamente ambas herramientas: ``curl https://pyenv.run | bash``
-    
-  - Agregar algunas líneas a la configuración de bash:
-    
+	- Instalar dependencias de pyenv y pyenv-virtualenv: ``sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev git``
+	- Instalamos propiamente ambas herramientas: ``curl https://pyenv.run | bash``
+	- Agregar algunas líneas a la configuración de bash:
     ``echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc``
-    
     ``echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc``
-    
     ``echo 'eval "$(pyenv init -)"' >> ~/.bashrc``
-    
     ``echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc``
+	- Recargar la configuración: `source ~/.bashrc`
     
-  -  Recargar la configuración: `source ~/.bashrc`
-    
-
 2. Crear el propio entorno a partir del fichero ``requirements.txt``. Para ello, seguimos los siguientes pasos:
-  - Creamos el entorno vacío de python 3.12: ``pyenv virtualenv 3.12 assistant``
-    
-  - Activamos el entorno: ``pyenv activate assistant``
-    
-  - Instalamos pip, que es la herramienta de manejo de librerías para python: ``sudo apt install pip``
-    
-  - Comprobamos que pip esté actualizado: ``pip install --upgrade pip``
-    
-  - Instalamos librerías con pip: ``pip install -r requirements.txt``
-    
+	- Creamos el entorno vacío de python 3.12: ``pyenv virtualenv 3.12 assistant``
+	- Activamos el entorno: ``pyenv activate assistant``
+	- Instalamos pip, que es la herramienta de manejo de librerías para python: ``sudo apt install pip``
+	- Comprobamos que pip esté actualizado: ``pip install --upgrade pip``
+	- Instalamos librerías con pip: ``pip install -r requirements.txt``
 
 A continuación, deberemos tener disponible este repositorio de código en la máquina debian donde deseemos ejecutar la aplicación. Los ficheros de configuración están preparados para las rutas específicas que se han mencionado antes, de manera que, si no los modificamos, el código deberá estar en ``/opt/assistant``, y toda la carpeta deberá pertener al usuario administrador, lo cual podemos hacer con ``sudo chown -R administrador:administrador /opt/assistant``. De la misma forma, los ficheros de configuración también están preparados para hacerlo todo con el usuario administrador, de manera que deberemos tener pyenv en su home, no en el root.
 
 Una vez tenemos el código y el entorno virtual, podemos configurar el servidor nginx:
-
 - Instalamos el paquete correspondiente: ``sudo apt install nginx``
-  
 - Deberemos asegurarnos de tener ``index.html`` en ``/var/www/chat``. Asimismo, deberemos establecer los permisos adecuados para que nginx pueda acceder al fichero: ``sudo chown -R www-data:www-data /var/www/chat`` y ``sudo chmod -R 755 /var/www/chat``
-  
 - De la misma manera, debemos tener el fichero de configuración de este repositorio, ``chat``, en ``/etc/nginx/sites-available/``, y establecer un enlace simbólico, ``sudo ln -s /etc/nginx/sites-available/chat /etc/nginx/sites-enabled/``
-  
 - Reiniciamos nginx: ``sudo systemctl restart nginx``. Cabe destacar que es conveniente que, antes de reiniciar, hagamos el siguiente punto, porque nginx dará error lo más seguro.
-  
 
 A continuación , tenemos que configurar el servicio de systemd que nos expone nuestra API:
-
 - Primero, copiamos el fichero de configuración ``assistant.service`` a ``/etc/systemd/system``
-  
 - A continuación, establecemos los permisos adecuados: ``sudo chmod 644 /etc/systemd/system/assistant.service``
-  
 - Recargamos el demonio de systemctl para que se dé cuenta del nuevo fichero: ``sudo sytemctl daemon-reload``
-  
 - Lo habilitamos para que el servicio arranque siempre que la máquina también lo haga (con la opción --now para que también se inicie sin necesidad de reiniciar el servidor): ``sudo systemctl enable --now assistant.service``. Para parar el servicio, ``sudo systemctl stop assistant.service``, para reiniciarlo, ``sudo systemctl restart assistant.service``
-  
 - Comprobamos su estado con ``sudo systemctl status assistant.service``. Otra herramienta relevante es ``journalctl`` para leer los logs y ver si se producen errores; con la orden ``sudo journalctl -fu assistant.service`` podemos ver los logs en tiempo real, y con ``sudo journalctl -u assistant.service -n 100`` podemos ver las últimas 100 (o las que queramos) líneas de logs.
-  
 - Hay que tener en cuenta que el proceso lo que hace es lanzar un servidor web ``uvicorn`` desde el propio entorno de python y a través del puerto 8000, por lo que hay que asegurarse de que el puerto está expuesto.
-  
+
+Por último, necesitamos tener disponible el servidor ``ollama`` que nos proporcione los LLM base para el sistema RAG (ver documentación de ollama en https://ollama.com/):
+
+- Lo instalamos con ``curl -fsSL https://ollama.com/install.sh | sh``
+- Lo iniciamos con ``sudo systemctl restart ollama``
+- Una vez tenemos el servicio ejecutándose, podemos listar los modelos que tenemos disponibles con ``ollama list`` y hacer pull a los modelos que queramos; en particular, por defecto nuestra implementación usa un ``granite4:micro-h``, por lo que podemos obtenerlo de ollama ejecutando ``ollama pull granite4:micro-h``
 
 IMPORTANTE, a lo largo de este documento se mencionará pero lo comentamos aquí, la generación de la base de datos vectorial es un proceso muy costoso. Dicha base de datos ya está generada, almacenada y lista para usarse en inferencia en los directorios que se mencionan más abajo, hay que tener cuidado con ello. No obstante, si se quiere volver a generar, contamos con el script que se comenta también abajo.
 
@@ -207,7 +188,15 @@ classDiagram
         }
 
         class main{ 
-            <>             +health() async            +list_models() async            +chat_completions(req) async            +gen() async            +legacy_completion(req) async            +clear(req) async            +root() async        }
+            <<API>>
+			+health() async
+			+list_models() async
+			+chat_completions(req) async
+			+gen() async
+			+legacy_completion(req) async
+			+clear(req) async
+			+root() async
+		}
 ```
 
 ### Flujo de la computación del backend
